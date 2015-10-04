@@ -272,7 +272,7 @@ public class ObservableNullTests {
     
     @Test(expected = NullPointerException.class)
     public void generateStateConsumerInitialStateNull() {
-        Observable.generate(null, (s, o) -> o.onNext(1));
+        Observable.generate(null, (BiConsumer<Integer, Subscriber<Integer>>)(s, o) -> o.onNext(1));
     }
 
     @Test(expected = NullPointerException.class)
@@ -287,7 +287,7 @@ public class ObservableNullTests {
     
     @Test
     public void generateConsumerStateNullAllowed() {
-        Observable.generate(() -> null, (s, o) -> o.onComplete()).toBlocking().lastOption();
+        Observable.generate(() -> null, (BiConsumer<Integer, Subscriber<Integer>>)(s, o) -> o.onComplete()).toBlocking().lastOption();
     }
 
     @Test
@@ -297,7 +297,7 @@ public class ObservableNullTests {
     
     @Test(expected = NullPointerException.class)
     public void generateConsumerDisposeNull() {
-        Observable.generate(() -> 1, (s, o) -> o.onNext(1), null);
+        Observable.generate(() -> 1, (BiConsumer<Integer, Subscriber<Integer>>)(s, o) -> o.onNext(1), null);
     }
     
     @Test(expected = NullPointerException.class)
