@@ -59,7 +59,7 @@ public class Single<T> {
     }
     
     public static <T> Single<T> amb(Iterable<? extends Single<? extends T>> sources) {
-        Objects.requireNonNull(sources);
+        Objects.requireNonNull(sources, "sources is null");
         return create(s -> {
             AtomicBoolean once = new AtomicBoolean();
             CompositeDisposable set = new CompositeDisposable();
@@ -335,7 +335,7 @@ public class Single<T> {
     }
     
     public static <T> Single<T> defer(Supplier<? extends Single<? extends T>> singleSupplier) {
-        Objects.requireNonNull(singleSupplier);
+        Objects.requireNonNull(singleSupplier, "singleSupplier is null");
         return create(s -> {
             Single<? extends T> next;
             
@@ -788,7 +788,7 @@ public class Single<T> {
 
     @SuppressWarnings("unchecked")
     public static <T, R> Single<R> zip(Iterable<? extends Single<? extends T>> sources, Function<? super Object[], ? extends R> zipper) {
-        Objects.requireNonNull(sources);
+        Objects.requireNonNull(sources, "sources is null");
         
         Iterable<? extends Observable<T>> it = () -> {
             Iterator<? extends Single<? extends T>> sit = sources.iterator();
@@ -944,7 +944,7 @@ public class Single<T> {
     }
 
     public final Single<T> ambWith(Single<? extends T> other) {
-        Objects.requireNonNull(other);
+        Objects.requireNonNull(other, "other is null");
         return amb(this, other);
     }
     
@@ -1031,7 +1031,7 @@ public class Single<T> {
     }
     
     public final <U> Single<U> cast(Class<? extends U> clazz) {
-        Objects.requireNonNull(clazz);
+        Objects.requireNonNull(clazz, "clazz is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
 
@@ -1098,7 +1098,7 @@ public class Single<T> {
     }
     
     public final Single<T> doOnSubscribe(Consumer<? super Disposable> onSubscribe) {
-        Objects.requireNonNull(onSubscribe);
+        Objects.requireNonNull(onSubscribe, "onSubscribe is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
                 boolean done;
@@ -1139,7 +1139,7 @@ public class Single<T> {
     }
     
     public final Single<T> doOnSuccess(Consumer<? super T> onSuccess) {
-        Objects.requireNonNull(onSuccess);
+        Objects.requireNonNull(onSuccess, "onSuccess is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
                 @Override
@@ -1168,7 +1168,7 @@ public class Single<T> {
     }
     
     public final Single<T> doOnError(Consumer<? super Throwable> onError) {
-        Objects.requireNonNull(onError);
+        Objects.requireNonNull(onError, "onError is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
                 @Override
@@ -1196,7 +1196,7 @@ public class Single<T> {
     }
     
     public final Single<T> doOnCancel(Runnable onCancel) {
-        Objects.requireNonNull(onCancel);
+        Objects.requireNonNull(onCancel, "onCancel is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
                 @Override
@@ -1222,7 +1222,7 @@ public class Single<T> {
     }
 
     public final <R> Single<R> flatMap(Function<? super T, ? extends Single<? extends R>> mapper) {
-        Objects.requireNonNull(mapper);
+        Objects.requireNonNull(mapper, "mapper is null");
         return lift(new SingleOperatorFlatMap<>(mapper));   
     }
 
@@ -1284,8 +1284,8 @@ public class Single<T> {
     }
 
     public final Single<Boolean> contains(Object value, BiPredicate<Object, Object> comparer) {
-        Objects.requireNonNull(value);
-        Objects.requireNonNull(comparer);
+        Objects.requireNonNull(value, "value is null");
+        Objects.requireNonNull(comparer, "comparer is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
 
@@ -1317,7 +1317,7 @@ public class Single<T> {
     }
     
     public final Single<T> observeOn(Scheduler scheduler) {
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return create(s -> {
             CompositeDisposable mad = new CompositeDisposable();
             s.onSubscribe(mad);
@@ -1344,7 +1344,7 @@ public class Single<T> {
     }
 
     public final Single<T> onErrorReturn(Supplier<? extends T> valueSupplier) {
-        Objects.requireNonNull(valueSupplier);
+        Objects.requireNonNull(valueSupplier, "valueSupplier is null");
         return create(s -> {
             subscribe(new SingleSubscriber<T>() {
 
@@ -1390,7 +1390,7 @@ public class Single<T> {
     }
 
     public final Single<T> onErrorResumeNext(Function<? super Throwable, ? extends Single<? extends T>> nextFunction) {
-        Objects.requireNonNull(nextFunction);
+        Objects.requireNonNull(nextFunction, "nextFunction is null");
         return create(s -> {
             MultipleAssignmentDisposable mad = new MultipleAssignmentDisposable();
             s.onSubscribe(mad);

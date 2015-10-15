@@ -346,7 +346,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public static <T> NbpObservable<T> defer(Supplier<? extends NbpObservable<? extends T>> supplier) {
-        Objects.requireNonNull(supplier);
+        Objects.requireNonNull(supplier, "supplier is null");
         return create(new NbpOnSubscribeDefer<>(supplier));
     }
 
@@ -566,7 +566,7 @@ public class NbpObservable<T> {
     }
 
     public static <T> NbpObservable<T> just(T value) {
-        Objects.requireNonNull(value);
+        Objects.requireNonNull(value, "The value is null");
         return new NbpObservableScalarSource<>(value);
     }
 
@@ -880,7 +880,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public static <T, R> NbpObservable<R> zip(NbpObservable<? extends NbpObservable<? extends T>> sources, Function<Object[], R> zipper) {
-        Objects.requireNonNull(zipper);
+        Objects.requireNonNull(zipper, "zipper is null");
         return sources.toList().flatMap(list -> {
             return zipIterable(zipper, false, bufferSize(), list);
         });
@@ -1002,7 +1002,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> ambWith(NbpObservable<? extends T> other) {
-        Objects.requireNonNull(other);
+        Objects.requireNonNull(other, "other is null");
         return amb(this, other);
     }
 
@@ -1160,7 +1160,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U> NbpObservable<U> cast(Class<U> clazz) {
-        Objects.requireNonNull(clazz);
+        Objects.requireNonNull(clazz, "clazz is null");
         return map(clazz::cast);
     }
 
@@ -1173,7 +1173,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U> NbpObservable<U> collectInto(U initialValue, BiConsumer<? super U, ? super T> collector) {
-        Objects.requireNonNull(initialValue);
+        Objects.requireNonNull(initialValue, "initialValue is null");
         return collect(() -> initialValue, collector);
     }
 
@@ -1197,7 +1197,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U> NbpObservable<U> concatMapIterable(Function<? super T, ? extends Iterable<? extends U>> mapper) {
-        Objects.requireNonNull(mapper);
+        Objects.requireNonNull(mapper, "mapper is null");
         return concatMap(v -> fromIterable(mapper.apply(v)));
     }
 
@@ -1300,7 +1300,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U> NbpObservable<T> delaySubscription(Supplier<? extends NbpObservable<U>> delaySupplier) {
-        Objects.requireNonNull(delaySupplier);
+        Objects.requireNonNull(delaySupplier, "delaySupplier is null");
         return fromCallable(delaySupplier::get).flatMap(v -> v).take(1).cast(Object.class).defaultIfEmpty(OBJECT).flatMap(v -> this);
     }
 
@@ -1323,8 +1323,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <K> NbpObservable<T> distinct(Function<? super T, K> keySelector, Supplier<? extends Collection<? super K>> collectionSupplier) {
-        Objects.requireNonNull(keySelector);
-        Objects.requireNonNull(collectionSupplier);
+        Objects.requireNonNull(keySelector, "keySelector is null");
+        Objects.requireNonNull(collectionSupplier, "collectionSupplier is null");
         return lift(NbpOperatorDistinct.withCollection(keySelector, collectionSupplier));
     }
 
@@ -1335,7 +1335,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <K> NbpObservable<T> distinctUntilChanged(Function<? super T, K> keySelector) {
-        Objects.requireNonNull(keySelector);
+        Objects.requireNonNull(keySelector, "keySelector is null");
         return lift(NbpOperatorDistinct.untilChanged(keySelector));
     }
 
@@ -1360,7 +1360,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> doOnEach(Consumer<? super Try<Optional<T>>> consumer) {
-        Objects.requireNonNull(consumer);
+        Objects.requireNonNull(consumer, "consumer is null");
         return doOnEach(
                 v -> consumer.accept(Try.ofValue(Optional.of(v))),
                 e -> consumer.accept(Try.ofError(e)),
@@ -1371,7 +1371,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> doOnEach(NbpSubscriber<? super T> observer) {
-        Objects.requireNonNull(observer);
+        Objects.requireNonNull(observer, "observer is null");
         return doOnEach(observer::onNext, observer::onError, observer::onComplete, () -> { });
     }
 
@@ -1382,8 +1382,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> doOnLifecycle(Consumer<? super Disposable> onSubscribe, Runnable onCancel) {
-        Objects.requireNonNull(onSubscribe);
-        Objects.requireNonNull(onCancel);
+        Objects.requireNonNull(onSubscribe, "onSubscribe is null");
+        Objects.requireNonNull(onCancel, "onCancel is null");
         return lift(s -> new NbpSubscriptionLambdaSubscriber<>(s, onSubscribe, onCancel));
     }
     
@@ -1520,9 +1520,9 @@ public class NbpObservable<T> {
             Function<? super T, ? extends NbpObservable<? extends R>> onNextMapper, 
             Function<? super Throwable, ? extends NbpObservable<? extends R>> onErrorMapper, 
             Supplier<? extends NbpObservable<? extends R>> onCompleteSupplier) {
-        Objects.requireNonNull(onNextMapper);
-        Objects.requireNonNull(onErrorMapper);
-        Objects.requireNonNull(onCompleteSupplier);
+        Objects.requireNonNull(onNextMapper, "onNextMapper is null");
+        Objects.requireNonNull(onErrorMapper, "onErrorMapper is null");
+        Objects.requireNonNull(onCompleteSupplier, "onCompleteSupplier is null");
         return merge(lift(new NbpOperatorMapNotification<>(onNextMapper, onErrorMapper, onCompleteSupplier)));
     }
 
@@ -1532,9 +1532,9 @@ public class NbpObservable<T> {
             Function<Throwable, ? extends NbpObservable<? extends R>> onErrorMapper, 
             Supplier<? extends NbpObservable<? extends R>> onCompleteSupplier, 
             int maxConcurrency) {
-        Objects.requireNonNull(onNextMapper);
-        Objects.requireNonNull(onErrorMapper);
-        Objects.requireNonNull(onCompleteSupplier);
+        Objects.requireNonNull(onNextMapper, "onNextMapper is null");
+        Objects.requireNonNull(onErrorMapper, "onErrorMapper is null");
+        Objects.requireNonNull(onCompleteSupplier, "onCompleteSupplier is null");
         return merge(lift(new NbpOperatorMapNotification<>(onNextMapper, onErrorMapper, onCompleteSupplier)), maxConcurrency);
     }
 
@@ -1560,8 +1560,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U, R> NbpObservable<R> flatMap(Function<? super T, ? extends NbpObservable<? extends U>> mapper, BiFunction<? super T, ? super U, ? extends R> combiner, boolean delayError, int maxConcurrency, int bufferSize) {
-        Objects.requireNonNull(mapper);
-        Objects.requireNonNull(combiner);
+        Objects.requireNonNull(mapper, "mapper is null");
+        Objects.requireNonNull(combiner, "combiner is null");
         return flatMap(t -> {
             @SuppressWarnings("unchecked")
             NbpObservable<U> u = (NbpObservable<U>)mapper.apply(t);
@@ -1576,7 +1576,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U> NbpObservable<U> flatMapIterable(Function<? super T, ? extends Iterable<? extends U>> mapper) {
-        Objects.requireNonNull(mapper);
+        Objects.requireNonNull(mapper, "mapper is null");
         return flatMap(v -> fromIterable(mapper.apply(v)));
     }
 
@@ -1732,7 +1732,7 @@ public class NbpObservable<T> {
     }
 
     public final <R> NbpObservable<R> map(Function<? super T, ? extends R> mapper) {
-        Objects.requireNonNull(mapper);
+        Objects.requireNonNull(mapper, "mapper is null");
         return lift(new NbpOperatorMap<>(mapper));
     }
 
@@ -1743,7 +1743,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> mergeWith(NbpObservable<? extends T> other) {
-        Objects.requireNonNull(other);
+        Objects.requireNonNull(other, "other is null");
         return merge(this, other);
     }
 
@@ -1772,7 +1772,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U> NbpObservable<U> ofType(Class<U> clazz) {
-        Objects.requireNonNull(clazz);
+        Objects.requireNonNull(clazz, "clazz is null");
         return filter(clazz::isInstance).cast(clazz);
     }
 
@@ -1884,7 +1884,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> repeatUntil(BooleanSupplier stop) {
-        Objects.requireNonNull(stop);
+        Objects.requireNonNull(stop, "stop is null");
         return create(new NbpOnSubscribeRepeatUntil<>(this, stop));
     }
 
@@ -1943,16 +1943,16 @@ public class NbpObservable<T> {
     
     @SchedulerSupport(SchedulerKind.CUSTOM)
     public final <R> NbpObservable<R> replay(Function<? super NbpObservable<T>, ? extends NbpObservable<R>> selector, final long time, final TimeUnit unit, final Scheduler scheduler) {
-        Objects.requireNonNull(selector);
-        Objects.requireNonNull(unit);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(selector, "selector is null");
+        Objects.requireNonNull(unit, "unit is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return NbpOperatorReplay.multicastSelector(() -> replay(time, unit, scheduler), selector);
     }
 
     @SchedulerSupport(SchedulerKind.CUSTOM)
     public final <R> NbpObservable<R> replay(final Function<? super NbpObservable<T>, ? extends NbpObservable<R>> selector, final Scheduler scheduler) {
-        Objects.requireNonNull(selector);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(selector, "selector is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return NbpOperatorReplay.multicastSelector(() -> replay(), 
                 t -> selector.apply(t).observeOn(scheduler));
     }
@@ -1972,8 +1972,8 @@ public class NbpObservable<T> {
         if (bufferSize < 0) {
             throw new IllegalArgumentException("bufferSize < 0");
         }
-        Objects.requireNonNull(unit);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(unit, "unit is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return NbpOperatorReplay.create(this, time, unit, scheduler, bufferSize);
     }
     
@@ -1989,8 +1989,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.CUSTOM)
     public final NbpConnectableObservable<T> replay(final long time, final TimeUnit unit, final Scheduler scheduler) {
-        Objects.requireNonNull(unit);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(unit, "unit is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return NbpOperatorReplay.create(this, time, unit, scheduler);
     }
 
@@ -2035,7 +2035,7 @@ public class NbpObservable<T> {
     
     @SchedulerSupport(SchedulerKind.NONE)
     public final NbpObservable<T> retryUntil(BooleanSupplier stop) {
-        Objects.requireNonNull(stop);
+        Objects.requireNonNull(stop, "stop is null");
         return retry(Long.MAX_VALUE, e -> !stop.getAsBoolean());
     }
     
@@ -2420,8 +2420,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.CUSTOM)
     public final NbpObservable<T> throttleFirst(long skipDuration, TimeUnit unit, Scheduler scheduler) {
-        Objects.requireNonNull(unit);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(unit, "unit is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return lift(new NbpOperatorThrottleFirstTimed<T>(skipDuration, unit, scheduler));
     }
 
@@ -2462,8 +2462,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.CUSTOM)
     public final NbpObservable<Timed<T>> timeInterval(TimeUnit unit, Scheduler scheduler) {
-        Objects.requireNonNull(unit);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(unit, "unit is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return lift(new NbpOperatorTimeInterval<>(unit, scheduler));
     }
 
@@ -2548,8 +2548,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.CUSTOM)
     public final NbpObservable<Timed<T>> timestamp(TimeUnit unit, Scheduler scheduler) {
-        Objects.requireNonNull(unit);
-        Objects.requireNonNull(scheduler);
+        Objects.requireNonNull(unit, "unit is null");
+        Objects.requireNonNull(scheduler, "scheduler is null");
         return map(v -> new Timed<>(v, scheduler.now(unit), unit));
     }
 
@@ -2591,8 +2591,8 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <K, V> NbpObservable<Map<K, V>> toMap(Function<? super T, ? extends K> keySelector, Function<? super T, ? extends V> valueSelector) {
-        Objects.requireNonNull(keySelector);
-        Objects.requireNonNull(valueSelector);
+        Objects.requireNonNull(keySelector, "keySelector is null");
+        Objects.requireNonNull(valueSelector, "valueSelector is null");
         return collect(HashMap::new, (m, t) -> {
             K key = keySelector.apply(t);
             V value = valueSelector.apply(t);
@@ -2633,10 +2633,10 @@ public class NbpObservable<T> {
             Function<? super T, ? extends V> valueSelector, 
             Supplier<? extends Map<K, Collection<V>>> mapSupplier,
             Function<? super K, ? extends Collection<? super V>> collectionFactory) {
-        Objects.requireNonNull(keySelector);
-        Objects.requireNonNull(valueSelector);
-        Objects.requireNonNull(mapSupplier);
-        Objects.requireNonNull(collectionFactory);
+        Objects.requireNonNull(keySelector, "keySelector is null");
+        Objects.requireNonNull(valueSelector, "valueSelector is null");
+        Objects.requireNonNull(mapSupplier, "mapSupplier is null");
+        Objects.requireNonNull(collectionFactory, "collectionFactory is null");
         return collect(mapSupplier, (m, t) -> {
             K key = keySelector.apply(t);
 
@@ -2883,7 +2883,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <B> NbpObservable<NbpObservable<T>> window(NbpObservable<B> boundary, int bufferSize) {
-        Objects.requireNonNull(boundary);
+        Objects.requireNonNull(boundary, "boundary is null");
         return lift(new NbpOperatorWindowBoundary<>(boundary, bufferSize));
     }
 
@@ -2898,8 +2898,8 @@ public class NbpObservable<T> {
     public final <U, V> NbpObservable<NbpObservable<T>> window(
             NbpObservable<U> windowOpen, 
             Function<? super U, ? extends NbpObservable<V>> windowClose, int bufferSize) {
-        Objects.requireNonNull(windowOpen);
-        Objects.requireNonNull(windowClose);
+        Objects.requireNonNull(windowOpen, "windowOpen is null");
+        Objects.requireNonNull(windowClose, "windowClose is null");
         return lift(new NbpOperatorWindowBoundarySelector<>(windowOpen, windowClose, bufferSize));
     }
     
@@ -2910,7 +2910,7 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <B> NbpObservable<NbpObservable<T>> window(Supplier<? extends NbpObservable<B>> boundary, int bufferSize) {
-        Objects.requireNonNull(boundary);
+        Objects.requireNonNull(boundary, "boundary is null");
         return lift(new NbpOperatorWindowBoundarySupplier<>(boundary, bufferSize));
     }
 
@@ -2924,14 +2924,14 @@ public class NbpObservable<T> {
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U, R> NbpObservable<R> zipWith(Iterable<? extends U> other,  BiFunction<? super T, ? super U, ? extends R> zipper) {
-        Objects.requireNonNull(other);
-        Objects.requireNonNull(zipper);
+        Objects.requireNonNull(other, "other is null");
+        Objects.requireNonNull(zipper, "zipper is null");
         return create(new NbpOnSubscribeZipIterable<>(this, other, zipper));
     }
 
     @SchedulerSupport(SchedulerKind.NONE)
     public final <U, R> NbpObservable<R> zipWith(NbpObservable<? extends U> other, BiFunction<? super T, ? super U, ? extends R> zipper) {
-        Objects.requireNonNull(other);
+        Objects.requireNonNull(other, "other is null");
         return zip(this, other, zipper);
     }
 
