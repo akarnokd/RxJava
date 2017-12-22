@@ -9,7 +9,7 @@ buildscript {
   dependencies {
     classpath "ru.vyarus:gradle-animalsniffer-plugin:1.2.0"
     classpath "gradle.plugin.nl.javadude.gradle.plugins:license-gradle-plugin:0.13.1"
-    classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.4"
+    classpath "me.champeau.gradle:jmh-gradle-plugin:0.4.5"
     classpath "com.jfrog.bintray.gradle:gradle-bintray-plugin:1.7.3"
     classpath "org.jfrog.buildinfo:build-info-extractor-gradle:4.5.2"
   }
@@ -53,13 +53,14 @@ targetCompatibility = JavaVersion.VERSION_1_6
 def junitVersion = "4.12"
 def reactiveStreamsVersion = "1.0.2"
 def mockitoVersion = "2.1.0"
-def jmhLibVersion = "1.19"
+def jmhLibVersion = "1.20-SNAPSHOT"
 def testNgVersion = "6.11"
 
 // --------------------------------------
 
 repositories {
   mavenCentral()
+  mavenLocal()
 }
 
 dependencies {
@@ -196,6 +197,7 @@ jmh {
     jmhVersion = jmhLibVersion
     humanOutputFile = null
     includeTests = false
+    jvmArgsAppend = ["-Djmh.ignoreLock=true", "-Djmh.separateClasspathJAR=true"]
 
     if (project.hasProperty("jmh")) {
         include = ".*" + project.jmh + ".*"
