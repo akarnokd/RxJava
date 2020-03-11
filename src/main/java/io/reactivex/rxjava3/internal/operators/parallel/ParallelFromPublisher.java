@@ -17,6 +17,7 @@ import java.util.concurrent.atomic.*;
 
 import org.reactivestreams.*;
 
+import io.reactivex.rxjava3.annotations.NonNull;
 import io.reactivex.rxjava3.core.FlowableSubscriber;
 import io.reactivex.rxjava3.exceptions.*;
 import io.reactivex.rxjava3.internal.fuseable.*;
@@ -32,6 +33,7 @@ import io.reactivex.rxjava3.parallel.ParallelFlowable;
  * @param <T> the value type
  */
 public final class ParallelFromPublisher<T> extends ParallelFlowable<T> {
+
     final Publisher<? extends T> source;
 
     final int parallelism;
@@ -64,11 +66,7 @@ public final class ParallelFromPublisher<T> extends ParallelFlowable<T> {
 
         private static final long serialVersionUID = -4470634016609963609L;
 
-        final Subscriber<? super T>[] subscribers;
-
-        final AtomicLongArray requests;
-
-        final long[] emissions;
+        final RailSubscription<T>[] rails;
 
         final int prefetch;
 
@@ -78,32 +76,32 @@ public final class ParallelFromPublisher<T> extends ParallelFlowable<T> {
 
         SimpleQueue<T> queue;
 
+        volatile boolean done;
         Throwable error;
 
-        volatile boolean done;
-
-        int index;
+        final AtomicInteger cancel;
 
         volatile boolean cancelled;
 
-        /**
-         * Counts how many subscribers were setup to delay triggering the
-         * drain of upstream until all of them have been setup.
-         */
-        final AtomicInteger subscriberCount = new AtomicInteger();
+        final AtomicLong ready;
 
-        int produced;
+        int index;
+
+        int consumed;
 
         int sourceMode;
 
+        @SuppressWarnings("unchecked")
         ParallelDispatcher(Subscriber<? super T>[] subscribers, int prefetch) {
-            this.subscribers = subscribers;
+            int n = subscribers.length;
+            this.rails = new RailSubscription[n];
+            for (int i = 0; i < subscribers.length; i++) {
+                this.rails[i] = new RailSubscription<>(this, subscribers[i]);
+            }
             this.prefetch = prefetch;
             this.limit = prefetch - (prefetch >> 2);
-            int m = subscribers.length;
-            this.requests = new AtomicLongArray(m + m + 1);
-            this.requests.lazySet(m + m, m);
-            this.emissions = new long[m];
+            this.cancel = new AtomicInteger(n);
+            this.ready = new AtomicLong(n);
         }
 
         @Override
@@ -115,92 +113,42 @@ public final class ParallelFromPublisher<T> extends ParallelFlowable<T> {
                     @SuppressWarnings("unchecked")
                     QueueSubscription<T> qs = (QueueSubscription<T>) s;
 
-                    int m = qs.requestFusion(QueueSubscription.ANY | QueueSubscription.BOUNDARY);
-
-                    if (m == QueueSubscription.SYNC) {
+                    int m = qs.requestFusion(QueueFuseable.ANY | QueueFuseable.BOUNDARY);
+                    if (m == QueueFuseable.SYNC) {
                         sourceMode = m;
                         queue = qs;
                         done = true;
-                        setupSubscribers();
-                        drain();
+                        subscribeRails();
                         return;
-                    } else
-                    if (m == QueueSubscription.ASYNC) {
+                    }
+                    if (m == QueueFuseable.ASYNC) {
                         sourceMode = m;
                         queue = qs;
-
-                        setupSubscribers();
-
+                        subscribeRails();
                         s.request(prefetch);
-
                         return;
                     }
                 }
 
                 queue = new SpscArrayQueue<>(prefetch);
 
-                setupSubscribers();
+                subscribeRails();
 
                 s.request(prefetch);
             }
         }
 
-        void setupSubscribers() {
-            Subscriber<? super T>[] subs = subscribers;
-            final int m = subs.length;
-
-            for (int i = 0; i < m; i++) {
-                subscriberCount.lazySet(i + 1);
-
-                subs[i].onSubscribe(new RailSubscription(i, m));
-            }
-        }
-
-        final class RailSubscription implements Subscription {
-
-            final int j;
-
-            final int m;
-
-            RailSubscription(int j, int m) {
-                this.j = j;
-                this.m = m;
-            }
-
-            @Override
-            public void request(long n) {
-                if (SubscriptionHelper.validate(n)) {
-                    AtomicLongArray ra = requests;
-                    for (;;) {
-                        long r = ra.get(j);
-                        if (r == Long.MAX_VALUE) {
-                            return;
-                        }
-                        long u = BackpressureHelper.addCap(r, n);
-                        if (ra.compareAndSet(j, r, u)) {
-                            break;
-                        }
-                    }
-                    if (subscriberCount.get() == m) {
-                        drain();
-                    }
-                }
-            }
-
-            @Override
-            public void cancel() {
-                if (requests.compareAndSet(m + j, 0L, 1L)) {
-                    ParallelDispatcher.this.cancel(m + m);
-                }
+        void subscribeRails() {
+            for (RailSubscription<T> rs : rails) {
+                rs.subscribe();
             }
         }
 
         @Override
-        public void onNext(T t) {
-            if (sourceMode == QueueSubscription.NONE) {
+        public void onNext(@NonNull T t) {
+            if (sourceMode == QueueFuseable.NONE) {
                 if (!queue.offer(t)) {
-                    upstream.cancel();
-                    onError(new MissingBackpressureException("Queue is full?"));
+                    onError(new MissingBackpressureException("Queue full?!"));
                     return;
                 }
             }
@@ -220,216 +168,243 @@ public final class ParallelFromPublisher<T> extends ParallelFlowable<T> {
             drain();
         }
 
-        void cancel(int m) {
-            if (requests.decrementAndGet(m) == 0L) {
-                cancelled = true;
-                this.upstream.cancel();
-
-                if (getAndIncrement() == 0) {
-                    queue.clear();
-                }
-            }
-        }
-
-        void drainAsync() {
-            int missed = 1;
-
-            SimpleQueue<T> q = queue;
-            Subscriber<? super T>[] a = this.subscribers;
-            AtomicLongArray r = this.requests;
-            long[] e = this.emissions;
-            int n = e.length;
-            int idx = index;
-            int consumed = produced;
-
-            for (;;) {
-
-                int notReady = 0;
-
-                for (;;) {
-                    if (cancelled) {
-                        q.clear();
-                        return;
-                    }
-
-                    boolean d = done;
-                    if (d) {
-                        Throwable ex = error;
-                        if (ex != null) {
-                            q.clear();
-                            for (Subscriber<? super T> s : a) {
-                                s.onError(ex);
-                            }
-                            return;
-                        }
-                    }
-
-                    boolean empty = q.isEmpty();
-
-                    if (d && empty) {
-                        for (Subscriber<? super T> s : a) {
-                            s.onComplete();
-                        }
-                        return;
-                    }
-
-                    if (empty) {
-                        break;
-                    }
-
-                    long requestAtIndex = r.get(idx);
-                    long emissionAtIndex = e[idx];
-                    if (requestAtIndex != emissionAtIndex && r.get(n + idx) == 0) {
-
-                        T v;
-
-                        try {
-                            v = q.poll();
-                        } catch (Throwable ex) {
-                            Exceptions.throwIfFatal(ex);
-                            upstream.cancel();
-                            for (Subscriber<? super T> s : a) {
-                                s.onError(ex);
-                            }
-                            return;
-                        }
-
-                        if (v == null) {
-                            break;
-                        }
-
-                        a[idx].onNext(v);
-
-                        e[idx] = emissionAtIndex + 1;
-
-                        int c = ++consumed;
-                        if (c == limit) {
-                            consumed = 0;
-                            upstream.request(c);
-                        }
-                        notReady = 0;
-                    } else {
-                        notReady++;
-                    }
-
-                    idx++;
-                    if (idx == n) {
-                        idx = 0;
-                    }
-
-                    if (notReady == n) {
-                        break;
-                    }
-                }
-
-                int w = get();
-                if (w == missed) {
-                    index = idx;
-                    produced = consumed;
-                    missed = addAndGet(-missed);
-                    if (missed == 0) {
-                        break;
-                    }
-                } else {
-                    missed = w;
-                }
-            }
-        }
-
-        void drainSync() {
-            int missed = 1;
-
-            SimpleQueue<T> q = queue;
-            Subscriber<? super T>[] a = this.subscribers;
-            AtomicLongArray r = this.requests;
-            long[] e = this.emissions;
-            int n = e.length;
-            int idx = index;
-
-            for (;;) {
-
-                int notReady = 0;
-
-                for (;;) {
-                    if (cancelled) {
-                        q.clear();
-                        return;
-                    }
-
-                    boolean empty = q.isEmpty();
-
-                    if (empty) {
-                        for (Subscriber<? super T> s : a) {
-                            s.onComplete();
-                        }
-                        return;
-                    }
-
-                    long requestAtIndex = r.get(idx);
-                    long emissionAtIndex = e[idx];
-                    if (requestAtIndex != emissionAtIndex && r.get(n + idx) == 0) {
-
-                        T v;
-
-                        try {
-                            v = q.poll();
-                        } catch (Throwable ex) {
-                            Exceptions.throwIfFatal(ex);
-                            upstream.cancel();
-                            for (Subscriber<? super T> s : a) {
-                                s.onError(ex);
-                            }
-                            return;
-                        }
-
-                        if (v == null) {
-                            for (Subscriber<? super T> s : a) {
-                                s.onComplete();
-                            }
-                            return;
-                        }
-
-                        a[idx].onNext(v);
-
-                        e[idx] = emissionAtIndex + 1;
-
-                        notReady = 0;
-                    } else {
-                        notReady++;
-                    }
-
-                    idx++;
-                    if (idx == n) {
-                        idx = 0;
-                    }
-
-                    if (notReady == n) {
-                        break;
-                    }
-                }
-
-                int w = get();
-                if (w == missed) {
-                    index = idx;
-                    missed = addAndGet(-missed);
-                    if (missed == 0) {
-                        break;
-                    }
-                } else {
-                    missed = w;
-                }
-            }
-        }
-
         void drain() {
             if (getAndIncrement() != 0) {
                 return;
             }
 
-            if (sourceMode == QueueSubscription.SYNC) {
+            if (sourceMode == QueueFuseable.SYNC) {
                 drainSync();
             } else {
                 drainAsync();
+            }
+        }
+
+        void drainSync() {
+            SimpleQueue<T> queue = this.queue;
+            RailSubscription<T>[] rails = this.rails;
+            int n = rails.length;
+
+            int index = this.index;
+            int notReady = 0;
+
+            int missed = 1;
+            for (;;) {
+
+                if (cancelled) {
+                    queue.clear();
+                } else {
+
+                    RailSubscription<T> rs = rails[index];
+
+                    long r = rs.get();
+                    long e = rs.emitted;
+
+                    if (r != Long.MIN_VALUE && r != e) {
+                        T item;
+                        try {
+                            item = queue.poll();
+                        } catch (Throwable ex) {
+                            Exceptions.throwIfFatal(ex);
+                            upstream.cancel();
+                            for (RailSubscription<T> rs0 : rails) {
+                                rs0.downstream.onError(ex);
+                            }
+                            cancelled = true;
+                            continue;
+                        }
+
+                        if (item != null) {
+
+                            rs.downstream.onNext(item);
+
+                            rs.emitted = e + 1;
+
+                            if (++index == n) {
+                                index = 0;
+                            }
+                            notReady = 0;
+                            continue;
+                        }
+                    } else {
+                        if (++index == n) {
+                            index = 0;
+                        }
+                        if (++notReady != n) {
+                            continue;
+                        }
+                    }
+                    if (queue.isEmpty()) {
+                        for (RailSubscription<T> rs0 : rails) {
+                            rs0.downstream.onComplete();
+                        }
+                        cancelled = true;
+                    }
+                }
+
+                int w = get();
+                if (w == missed) {
+                    this.index = index;
+                    missed = addAndGet(-missed);
+                    if (missed == 0) {
+                        break;
+                    }
+                } else {
+                    missed = w;
+                }
+                notReady = 0;
+            }
+        }
+
+        void drainAsync() {
+            SimpleQueue<T> queue = this.queue;
+            RailSubscription<T>[] rails = this.rails;
+            int n = rails.length;
+
+            int index = this.index;
+            int notReady = 0;
+            int c = this.consumed;
+            int limit = this.limit;
+
+            int missed = 1;
+            for (;;) {
+
+                if (cancelled) {
+                    queue.clear();
+                } else {
+
+                    boolean d = done;
+                    if (d) {
+                        Throwable ex = error;
+                        if (ex != null) {
+                            for (RailSubscription<T> rs : rails) {
+                                rs.downstream.onError(ex);
+                            }
+                            cancelled = true;
+                            continue;
+                        }
+                    }
+
+                    RailSubscription<T> rs = rails[index];
+
+                    long r = rs.get();
+                    long e = rs.emitted;
+
+                    if (r != Long.MIN_VALUE && r != e) {
+                        T item;
+                        try {
+                            item = queue.poll();
+                        } catch (Throwable ex) {
+                            Exceptions.throwIfFatal(ex);
+                            upstream.cancel();
+                            for (RailSubscription<T> rs0 : rails) {
+                                rs0.downstream.onError(ex);
+                            }
+                            cancelled = true;
+                            continue;
+                        }
+
+                        if (item != null) {
+
+                            rs.downstream.onNext(item);
+
+                            rs.emitted = e + 1;
+
+                            if (++c == limit) {
+                                c = 0;
+                                upstream.request(limit);
+                            }
+
+                            if (++index == n) {
+                                index = 0;
+                            }
+                            notReady = 0;
+                            continue;
+                        }
+                    } else {
+                        if (++index == n) {
+                            index = 0;
+                        }
+                        if (++notReady != n) {
+                            continue;
+                        }
+                    }
+
+                    if (done && queue.isEmpty()) {
+                        for (RailSubscription<T> rs0 : rails) {
+                            rs0.downstream.onComplete();
+                        }
+                        cancelled = true;
+                        continue;
+                    }
+                }
+
+                int w = get();
+                if (w == missed) {
+                    this.index = index;
+                    this.consumed = c;
+                    missed = addAndGet(-missed);
+                    if (missed == 0) {
+                        break;
+                    }
+                } else {
+                    missed = w;
+                }
+                notReady = 0;
+            }
+        }
+
+        void cancelRail() {
+            if (cancel.decrementAndGet() == 0) {
+                cancelled = true;
+                upstream.cancel();
+                drain();
+            }
+        }
+
+        void requested(long m) {
+            if (m == 0) {
+                if (ready.decrementAndGet() == 0) {
+                    drain();
+                }
+            } else {
+                drain();
+            }
+        }
+
+        static final class RailSubscription<T>
+        extends AtomicLong
+        implements Subscription {
+
+            private static final long serialVersionUID = -8895167190215878854L;
+
+            final ParallelDispatcher<T> parent;
+
+            final Subscriber<? super T> downstream;
+
+            long emitted;
+
+            RailSubscription(ParallelDispatcher<T> parent, Subscriber<? super T> downstream) {
+                this.parent = parent;
+                this.downstream = downstream;
+            }
+
+            @Override
+            public void request(long n) {
+                if (SubscriptionHelper.validate(n)) {
+                    parent.requested(BackpressureHelper.addCancel(this, n));
+                }
+            }
+
+            @Override
+            public void cancel() {
+                if (getAndSet(Long.MIN_VALUE) != Long.MIN_VALUE) {
+                    parent.cancelRail();
+                }
+            }
+
+            void subscribe() {
+                downstream.onSubscribe(this);
             }
         }
     }
