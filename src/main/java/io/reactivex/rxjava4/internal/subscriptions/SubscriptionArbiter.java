@@ -63,11 +63,6 @@ public class SubscriptionArbiter extends AtomicInteger implements Subscription {
      * @param s the subscription to set, not null (verified)
      */
     public final void setSubscription(Subscription s) {
-        if (cancelled) {
-            s.cancel();
-            return;
-        }
-
         Objects.requireNonNull(s, "s is null");
 
         if (get() == 0 && compareAndSet(0, 1)) {
@@ -75,6 +70,14 @@ public class SubscriptionArbiter extends AtomicInteger implements Subscription {
 
             if (a != null && cancelOnReplace) {
                 a.cancel();
+            }
+
+            if (cancelled) {
+                s.cancel();
+                if (decrementAndGet() != 0) {
+                    drainLoop();
+                }
+                return;
             }
 
             actual = s;
